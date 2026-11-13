@@ -21,14 +21,31 @@ pub struct Sub {
     pub url: String,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct HwidProfile {
+    pub name: String,
+    pub value: String,
+}
+
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Settings {
     pub send_hwid: bool,
+    #[serde(default)]
+    pub hwids: Vec<HwidProfile>,
+    /// Индекс активного профиля; None — реальный HWID устройства.
+    #[serde(default)]
+    pub hwid_active: Option<usize>,
     /// 0 — Xray, 1 — Happ, 2 — Incy.
     pub ua: u8,
 }
 
 impl Settings {
+    pub fn effective_hwid(&self) -> String {
+        self.hwid_active
+            .and_then(|i| self.hwids.get(i))
+            .map_or_else(sys::hwid, |h| h.value.clone())
+    }
+
     pub fn user_agent(&self) -> &'static str {
         match self.ua {
             1 => "Happ/3.13.0",
@@ -260,4 +277,29 @@ pub fn describe(link: &str) -> String {
     let Some(v) = parse_vless(link) else { return "VLESS".into() };
     let g = |k: &str, d: &str| v.q.get(k).filter(|s| !s.is_empty()).map_or(d, String::as_str).to_uppercase();
     format!("VLESS / {} / {}", g("type", "tcp"), g("security", "none"))
+}
+
+/// Случайный HWID в виде UUID v4 (как в примерах клиентов).
+pub fn random_hwid() -> String {
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+    let word = |salt: u64| {
+        let mut h = RandomState::new().build_hasher();
+        h.write_u64(salt);
+        h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()));
+        h.finish()
+    };
+    let (a, b) = (word(1), word(2));
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&a.to_le_bytes());
+    bytes[8..].copy_from_slice(&b.to_le_bytes());
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    let h: String = bytes.iter().map(|x| format!("{x:02X}")).collect();
+    format!("{}-{}-{}-{}-{}", &h[..8], &h[8..12], &h[12..16], &h[16..20], &h[20..])
+}
+
+/// Свой HWID попадает в HTTP-заголовок, поэтому только безопасные символы.
+pub fn valid_hwid(v: &str) -> bool {
+    !v.is_empty() && v.len() <= 64 && v.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }

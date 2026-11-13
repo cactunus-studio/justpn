@@ -92,8 +92,26 @@ fn render(app: &Shared, ui: &Weak<MainWindow>) {
     let sel_name = selected.map_or(String::new(), |s| s.name.clone());
     let sel_info = selected.map_or(String::new(), |s| model::describe(&s.link));
     let sel_ping = selected.and_then(|s| a.ping.get(&s.link)).cloned().unwrap_or_default();
+    let cfg = &st.settings;
+    let mut hwids = vec![HwidItem {
+        name: "Реальный (устройство)".into(),
+        value: sys::hwid().into(),
+        active: cfg.hwid_active.is_none(),
+        idx: -1,
+    }];
+    for (i, h) in cfg.hwids.iter().enumerate() {
+        hwids.push(HwidItem {
+            name: h.name.as_str().into(),
+            value: h.value.as_str().into(),
+            active: cfg.hwid_active == Some(i),
+            idx: i as i32,
+        });
+    }
+    let hwid_now = cfg.effective_hwid();
     drop(a);
     ui_do(ui, move |u| {
+        u.set_hwids(ModelRc::new(VecModel::from(hwids)));
+        u.set_hwid(hwid_now.into());
         u.set_rows(ModelRc::new(VecModel::from(rows)));
         u.set_selected_name(sel_name.into());
         u.set_selected_info(sel_info.into());
@@ -182,7 +200,7 @@ fn fetch_sub(url: &str, cfg: &model::Settings) -> Result<(String, Vec<Server>), 
     let mut req = sys::http_agent(Duration::from_secs(20)).get(url).header("User-Agent", cfg.user_agent());
     if cfg.send_hwid {
         req = req
-            .header("x-hwid", sys::hwid())
+            .header("x-hwid", cfg.effective_hwid())
             .header("x-device-os", "Windows")
             .header("x-ver-os", "11")
             .header("x-device-model", "PC");
@@ -367,17 +385,89 @@ fn main() {
 
     win.set_send_hwid(lock(&app).state.settings.send_hwid);
     win.set_user_agent(lock(&app).state.settings.ua as i32);
-    win.set_hwid(sys::hwid().into());
     win.on_settings_changed({
         let (app, ui) = (app.clone(), ui.clone());
         move |send_hwid, ua| {
             {
                 let mut a = lock(&app);
-                a.state.settings = model::Settings { send_hwid, ua: ua as u8 };
+                a.state.settings.send_hwid = send_hwid;
+                a.state.settings.ua = ua as u8;
                 a.state.save();
             }
             // Панели отдают серверы по заголовкам — сразу обновляем подписки.
             refresh_subs(&app, &ui, false);
+        }
+    });
+
+    // Менеджер HWID: выбор / создание / добавление / удаление профилей.
+    fn hwid_edit(app: &Shared, ui: &Weak<MainWindow>, f: impl FnOnce(&mut model::Settings) -> Result<(), &'static str>) {
+        let res = {
+            let mut a = lock(app);
+            let r = f(&mut a.state.settings);
+            if r.is_ok() {
+                a.state.save();
+            }
+            r
+        };
+        match res {
+            Ok(()) => {
+                render(app, ui);
+                refresh_subs(app, ui, false);
+            }
+            Err(e) => toast(ui, e),
+        }
+    }
+    win.on_hwid_select({
+        let (app, ui) = (app.clone(), ui.clone());
+        move |i| {
+            hwid_edit(&app, &ui, |c| {
+                c.hwid_active = (i >= 0 && (i as usize) < c.hwids.len()).then_some(i as usize);
+                Ok(())
+            })
+        }
+    });
+    win.on_hwid_generate({
+        let (app, ui) = (app.clone(), ui.clone());
+        move || {
+            hwid_edit(&app, &ui, |c| {
+                c.hwids.push(model::HwidProfile {
+                    name: format!("Случайный {}", c.hwids.len() + 1),
+                    value: model::random_hwid(),
+                });
+                c.hwid_active = Some(c.hwids.len() - 1);
+                Ok(())
+            })
+        }
+    });
+    win.on_hwid_add({
+        let (app, ui) = (app.clone(), ui.clone());
+        move |v| {
+            let v = v.trim().to_string();
+            hwid_edit(&app, &ui, |c| {
+                if !model::valid_hwid(&v) {
+                    return Err("HWID: до 64 символов, только буквы, цифры, - и _");
+                }
+                c.hwids.push(model::HwidProfile { name: format!("Свой {}", c.hwids.len() + 1), value: v });
+                c.hwid_active = Some(c.hwids.len() - 1);
+                Ok(())
+            })
+        }
+    });
+    win.on_hwid_remove({
+        let (app, ui) = (app.clone(), ui.clone());
+        move |i| {
+            hwid_edit(&app, &ui, |c| {
+                let i = i as usize;
+                if i < c.hwids.len() {
+                    c.hwids.remove(i);
+                    c.hwid_active = match c.hwid_active {
+                        Some(a) if a == i => None,
+                        Some(a) if a > i => Some(a - 1),
+                        other => other,
+                    };
+                }
+                Ok(())
+            })
         }
     });
 

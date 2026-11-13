@@ -144,6 +144,8 @@ component ConnectButton inherits Rectangle {
     }
 }
 
+export struct HwidItem { name: string, value: string, active: bool, idx: int }
+
 export struct RowItem {
     kind: int,        // 0 — заголовок подписки, 1 — сервер
     title: string,
@@ -274,6 +276,12 @@ export component MainWindow inherits Window {
     in-out property <bool> send-hwid: false;
     in-out property <int> user-agent: 0;
     in property <string> hwid;
+    in property <[HwidItem]> hwids;
+    in-out property <bool> show-hwids: false;
+    callback hwid-select(int);
+    callback hwid-generate();
+    callback hwid-add(string);
+    callback hwid-remove(int);
     callback settings-changed(bool, int);
 
     callback toggle-connect();
@@ -560,6 +568,13 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
+                HorizontalLayout {
+                    FilledBtn {
+                        width: 200px;
+                        text: "Менеджер HWID";
+                        clicked => { root.show-hwids = true; }
+                    }
+                }
                 VerticalLayout {
                     spacing: 10px;
                     Text {
@@ -599,6 +614,137 @@ export component MainWindow inherits Window {
                         width: 96px;
                         text: "Готово";
                         clicked => { root.show-settings = false; }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.show-hwids: Rectangle {
+        background: #000000.with-alpha(0.5);
+        TouchArea {
+            clicked => { root.show-hwids = false; }
+        }
+        Rectangle {
+            width: min(parent.width - 48px, 460px);
+            height: hl.preferred-height;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 28px;
+            background: Theme.container-high;
+            TouchArea { }
+            hl := VerticalLayout {
+                padding: 24px;
+                spacing: 14px;
+                Text {
+                    text: "Менеджер HWID";
+                    font-size: 24px;
+                    color: Theme.on-surface;
+                }
+                Text {
+                    text: "Активный HWID уходит в заголовке x-hwid при загрузке подписки. Не используйте подмену, чтобы обходить лимит устройств у провайдера — это может нарушать его условия.";
+                    font-size: 12px;
+                    wrap: word-wrap;
+                    color: Theme.on-surface-variant;
+                }
+                Flickable {
+                    height: 190px;
+                    VerticalLayout {
+                        spacing: 6px;
+                        for h in root.hwids: Rectangle {
+                            height: 56px;
+                            border-radius: 14px;
+                            background: h.active ? Theme.secondary-container : Theme.container;
+                            animate background { duration: 200ms; }
+                            TouchArea {
+                                clicked => { root.hwid-select(h.idx); }
+                            }
+                            HorizontalLayout {
+                                padding-left: 16px;
+                                padding-right: 4px;
+                                spacing: 10px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 20px;
+                                        height: 20px;
+                                        border-radius: 10px;
+                                        border-width: 2px;
+                                        border-color: h.active ? Theme.primary : Theme.outline;
+                                        Rectangle {
+                                            width: h.active ? 8px : 0px;
+                                            height: self.width;
+                                            border-radius: self.width / 2;
+                                            x: (parent.width - self.width) / 2 - 2px;
+                                            y: (parent.height - self.height) / 2 - 2px;
+                                            background: Theme.primary;
+                                        }
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 1px;
+                                    Text {
+                                        text: h.name;
+                                        font-size: 14px;
+                                        color: Theme.on-surface;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: h.value;
+                                        font-size: 11px;
+                                        color: Theme.on-surface-variant;
+                                        overflow: elide;
+                                    }
+                                }
+                                if h.idx >= 0: VerticalLayout {
+                                    alignment: center;
+                                    IconBtn {
+                                        width: 40px;
+                                        height: 40px;
+                                        icon: "M5 7h14 M10 11v6 M14 11v6 M6 7l1 13h10l1-13 M9 7V4h6v3";
+                                        clicked => { root.hwid-remove(h.idx); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    hwid-field := Field {
+                        height: 48px;
+                        border-radius: 24px;
+                        placeholder: "Свой HWID";
+                        accepted => {
+                            root.hwid-add(self.text);
+                            self.text = "";
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        FilledBtn {
+                            width: 96px;
+                            text: "Добавить";
+                            clicked => {
+                                root.hwid-add(hwid-field.text);
+                                hwid-field.text = "";
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    FilledBtn {
+                        width: 190px;
+                        text: "Сгенерировать случайный";
+                        clicked => { root.hwid-generate(); }
+                    }
+                    FilledBtn {
+                        width: 96px;
+                        text: "Готово";
+                        clicked => { root.show-hwids = false; }
                     }
                 }
             }
