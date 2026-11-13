@@ -31,8 +31,8 @@ pub struct Settings {
 impl Settings {
     pub fn user_agent(&self) -> &'static str {
         match self.ua {
-            1 => "Happ/2.7.0",
-            2 => "Incy/1.0.0",
+            1 => "Happ/3.13.0",
+            2 => "INCY/1.0.0/Windows",
             _ => "Xray-core/25.10.15",
         }
     }

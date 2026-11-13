@@ -187,6 +187,10 @@ fn fetch_sub(url: &str, cfg: &model::Settings) -> Result<(String, Vec<Server>), 
             .header("x-ver-os", "11")
             .header("x-device-model", "PC");
     }
+    if cfg.ua == 2 {
+        // Заголовки из документации INCY (docs.incy.cc/en/subscription-format).
+        req = req.header("x-client", "INCY").header("x-app-version", "1.0.0").header("x-device-locale", "ru-RU");
+    }
     let mut resp = req.call().map_err(|e| e.to_string())?;
     let title = resp
         .headers()
