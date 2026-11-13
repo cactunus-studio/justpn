@@ -270,6 +270,11 @@ export component MainWindow inherits Window {
     in property <string> selected-ping;
     in property <[RowItem]> rows;
     in-out property <bool> show-add: false;
+    in-out property <bool> show-settings: false;
+    in-out property <bool> send-hwid: false;
+    in-out property <int> user-agent: 0;
+    in property <string> hwid;
+    callback settings-changed(bool, int);
 
     callback toggle-connect();
     callback select-server(int);
@@ -377,6 +382,11 @@ export component MainWindow inherits Window {
                 spacing: 16px;
                 HorizontalLayout {
                     alignment: end;
+                    spacing: 8px;
+                    IconBtn {
+                        icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z";
+                        clicked => { root.show-settings = true; }
+                    }
                     Rectangle {
                         height: 36px;
                         width: 200px;
@@ -479,6 +489,117 @@ export component MainWindow inherits Window {
                     color: Theme.inverse-on-surface;
                     vertical-alignment: center;
                     overflow: elide;
+                }
+            }
+        }
+    }
+
+    if root.show-settings: Rectangle {
+        background: #000000.with-alpha(0.5);
+        TouchArea {
+            clicked => { root.show-settings = false; }
+        }
+        Rectangle {
+            width: min(parent.width - 48px, 420px);
+            height: lay.preferred-height;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 28px;
+            background: Theme.container-high;
+            TouchArea { }
+            lay := VerticalLayout {
+                padding: 24px;
+                spacing: 20px;
+                Text {
+                    text: "Настройки";
+                    font-size: 24px;
+                    color: Theme.on-surface;
+                }
+                HorizontalLayout {
+                    spacing: 12px;
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 2px;
+                        Text {
+                            text: "Отправлять HWID";
+                            font-size: 16px;
+                            color: Theme.on-surface;
+                        }
+                        Text {
+                            text: "ID устройства: " + root.hwid;
+                            font-size: 11px;
+                            color: Theme.on-surface-variant;
+                            overflow: elide;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 52px;
+                            height: 32px;
+                            border-radius: 16px;
+                            background: root.send-hwid ? Theme.primary : Theme.container-highest;
+                            border-width: root.send-hwid ? 0px : 2px;
+                            border-color: Theme.outline;
+                            animate background { duration: 200ms; }
+                            Rectangle {
+                                width: root.send-hwid ? 24px : 16px;
+                                height: self.width;
+                                border-radius: self.width / 2;
+                                x: root.send-hwid ? parent.width - self.width - 4px : 8px;
+                                y: (parent.height - self.height) / 2;
+                                background: root.send-hwid ? Theme.on-primary : Theme.outline;
+                                animate x, width { duration: 200ms; easing: ease-in-out; }
+                            }
+                            TouchArea {
+                                clicked => {
+                                    root.send-hwid = !root.send-hwid;
+                                    root.settings-changed(root.send-hwid, root.user-agent);
+                                }
+                            }
+                        }
+                    }
+                }
+                VerticalLayout {
+                    spacing: 10px;
+                    Text {
+                        text: "User-Agent";
+                        font-size: 16px;
+                        color: Theme.on-surface;
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        for name[i] in ["Xray", "Happ", "Incy"]: Rectangle {
+                            height: 40px;
+                            border-radius: 12px;
+                            background: root.user-agent == i ? Theme.secondary-container : transparent;
+                            border-width: root.user-agent == i ? 0px : 1px;
+                            border-color: Theme.outline;
+                            animate background { duration: 200ms; }
+                            Text {
+                                text: name;
+                                font-size: 14px;
+                                font-weight: 500;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                color: root.user-agent == i ? Theme.on-secondary-container : Theme.on-surface-variant;
+                            }
+                            TouchArea {
+                                clicked => {
+                                    root.user-agent = i;
+                                    root.settings-changed(root.send-hwid, i);
+                                }
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    FilledBtn {
+                        width: 96px;
+                        text: "Готово";
+                        clicked => { root.show-settings = false; }
+                    }
                 }
             }
         }

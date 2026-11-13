@@ -21,8 +21,27 @@ pub struct Sub {
     pub url: String,
 }
 
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct Settings {
+    pub send_hwid: bool,
+    /// 0 — Xray, 1 — Happ, 2 — Incy.
+    pub ua: u8,
+}
+
+impl Settings {
+    pub fn user_agent(&self) -> &'static str {
+        match self.ua {
+            1 => "Happ/2.7.0",
+            2 => "Incy/1.0.0",
+            _ => "Xray-core/25.10.15",
+        }
+    }
+}
+
 #[derive(Default, Serialize, Deserialize)]
 pub struct State {
+    #[serde(default)]
+    pub settings: Settings,
     pub subs: Vec<Sub>,
     pub servers: Vec<Server>,
     pub selected: Option<String>,

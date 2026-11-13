@@ -143,3 +143,17 @@ pub fn tcp_ping(link: &str) -> String {
         Err(_) => "—".into(),
     }
 }
+
+/// Стабильный идентификатор устройства для панелей, ограничивающих число устройств.
+/// Считается из MachineGuid, но сам GUID наружу не уходит.
+pub fn hwid() -> String {
+    let guid: String = RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE)
+        .open_subkey(r"SOFTWARE\Microsoft\Cryptography")
+        .and_then(|k| k.get_value("MachineGuid"))
+        .unwrap_or_else(|_| "justpn-unknown".into());
+    let fnv = |seed: u64| {
+        guid.bytes()
+            .fold(0xcbf29ce484222325 ^ seed, |h, b| (h ^ b as u64).wrapping_mul(0x100000001b3))
+    };
+    format!("{:016x}{:016x}", fnv(0), fnv(0x9e3779b97f4a7c15))
+}

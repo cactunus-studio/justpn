@@ -178,8 +178,16 @@ fn disconnect(app: &Shared, ui: &Weak<MainWindow>) {
     set_conn(ui, ConnState::Off);
 }
 
-fn fetch_sub(url: &str) -> Result<(String, Vec<Server>), String> {
-    let mut resp = sys::http_agent(Duration::from_secs(20)).get(url).call().map_err(|e| e.to_string())?;
+fn fetch_sub(url: &str, cfg: &model::Settings) -> Result<(String, Vec<Server>), String> {
+    let mut req = sys::http_agent(Duration::from_secs(20)).get(url).header("User-Agent", cfg.user_agent());
+    if cfg.send_hwid {
+        req = req
+            .header("x-hwid", sys::hwid())
+            .header("x-device-os", "Windows")
+            .header("x-ver-os", "11")
+            .header("x-device-model", "PC");
+    }
+    let mut resp = req.call().map_err(|e| e.to_string())?;
     let title = resp
         .headers()
         .get("profile-title")
@@ -214,7 +222,8 @@ fn add_input(app: &Shared, ui: &Weak<MainWindow>, text: String) {
             }
         } else if text.starts_with("http://") || text.starts_with("https://") {
             toast(&ui, "Загружаю подписку…");
-            match fetch_sub(&text) {
+            let cfg = lock(&app).state.settings.clone();
+            match fetch_sub(&text, &cfg) {
                 Ok((_, servers)) if servers.is_empty() => toast(&ui, "В подписке нет VLESS-серверов"),
                 Ok((name, servers)) => {
                     let n = servers.len();
@@ -245,7 +254,8 @@ fn refresh_subs(app: &Shared, ui: &Weak<MainWindow>, quiet: bool) {
         }
         let (mut ok, mut fail) = (0, 0);
         for url in urls {
-            match fetch_sub(&url) {
+            let cfg = lock(&app).state.settings.clone();
+            match fetch_sub(&url, &cfg) {
                 Ok((name, servers)) if !servers.is_empty() => {
                     let mut a = lock(&app);
                     a.state.upsert_sub(&url, &name, servers);
@@ -349,6 +359,22 @@ fn main() {
     win.on_add({
         let (app, ui) = (app.clone(), ui.clone());
         move |t| add_input(&app, &ui, t.to_string())
+    });
+
+    win.set_send_hwid(lock(&app).state.settings.send_hwid);
+    win.set_user_agent(lock(&app).state.settings.ua as i32);
+    win.set_hwid(sys::hwid().into());
+    win.on_settings_changed({
+        let (app, ui) = (app.clone(), ui.clone());
+        move |send_hwid, ua| {
+            {
+                let mut a = lock(&app);
+                a.state.settings = model::Settings { send_hwid, ua: ua as u8 };
+                a.state.save();
+            }
+            // Панели отдают серверы по заголовкам — сразу обновляем подписки.
+            refresh_subs(&app, &ui, false);
+        }
     });
 
     win.on_search({
