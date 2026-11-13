@@ -78,6 +78,7 @@ component Field inherits Rectangle {
     in-out property <string> text <=> input.text;
     in property <string> placeholder;
     callback accepted();
+    callback edited(string);
     height: 56px;
     border-radius: 28px;
     background: Theme.surface;
@@ -94,6 +95,7 @@ component Field inherits Rectangle {
         selection-background-color: Theme.primary-container;
         selection-foreground-color: Theme.on-primary-container;
         accepted => { root.accepted(); }
+        edited => { root.edited(self.text); }
     }
     if input.text == "": Text {
         x: 20px;
@@ -101,50 +103,6 @@ component Field inherits Rectangle {
         text: root.placeholder;
         font-size: 16px;
         color: Theme.on-surface-variant;
-    }
-}
-
-component NavItem inherits Rectangle {
-    in property <string> label;
-    in property <string> icon;
-    in property <bool> active;
-    callback clicked();
-    VerticalLayout {
-        alignment: center;
-        spacing: 4px;
-        HorizontalLayout {
-            alignment: center;
-            Rectangle {
-                width: 64px;
-                height: 32px;
-                border-radius: 16px;
-                background: root.active ? Theme.secondary-container : Theme.on-surface.with-alpha(ta.has-hover ? 0.08 : 0);
-                animate background { duration: 200ms; easing: ease-in-out; }
-                Path {
-                    x: (parent.width - self.width) / 2;
-                    y: (parent.height - self.height) / 2;
-                    width: 24px;
-                    height: 24px;
-                    viewbox-width: 24;
-                    viewbox-height: 24;
-                    commands: root.icon;
-                    stroke: root.active ? Theme.on-secondary-container : Theme.on-surface-variant;
-                    stroke-width: 2px;
-                    stroke-line-cap: round;
-                    stroke-line-join: round;
-                }
-            }
-        }
-        Text {
-            text: root.label;
-            font-size: 12px;
-            font-weight: root.active ? 700 : 500;
-            horizontal-alignment: center;
-            color: root.active ? Theme.on-surface : Theme.on-surface-variant;
-        }
-    }
-    ta := TouchArea {
-        clicked => { root.clicked(); }
     }
 }
 
@@ -186,52 +144,101 @@ component ConnectButton inherits Rectangle {
     }
 }
 
-component ServerRow inherits Rectangle {
-    in property <ServerItem> item;
+export struct RowItem {
+    kind: int,        // 0 — заголовок подписки, 1 — сервер
+    title: string,
+    subtitle: string,
+    ping: string,
+    selected: bool,
+    expanded: bool,
+    idx: int,
+}
+
+component Row inherits Rectangle {
+    in property <RowItem> item;
     callback clicked();
-    height: 68px;
-    border-radius: 20px;
-    background: root.item.selected ? Theme.secondary-container : Theme.container;
+    callback remove();
+    height: root.item.kind == 0 ? 56px : 60px;
+    border-radius: root.item.kind == 0 ? 16px : 12px;
+    background: root.item.kind == 0 ? Theme.container-high
+        : root.item.selected ? Theme.secondary-container : Theme.container;
     animate background { duration: 200ms; }
     Rectangle {
         border-radius: parent.border-radius;
         background: Theme.on-surface.with-alpha(ta.pressed ? 0.12 : ta.has-hover ? 0.06 : 0);
     }
-    HorizontalLayout {
-        padding-left: 16px;
-        padding-right: 16px;
-        spacing: 14px;
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+    if root.item.kind == 1 && root.item.selected: Rectangle {
+        x: 0px;
+        y: 12px;
+        width: 4px;
+        height: parent.height - 24px;
+        border-radius: 2px;
+        background: Theme.primary;
+    }
+    if root.item.kind == 0: HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 4px;
+        spacing: 8px;
         VerticalLayout {
             alignment: center;
-            Rectangle {
-                width: 22px;
-                height: 22px;
-                border-radius: 11px;
-                border-width: 2px;
-                border-color: root.item.selected ? Theme.primary : Theme.outline;
-                Rectangle {
-                    width: root.item.selected ? 10px : 0px;
-                    height: self.width;
-                    border-radius: self.width / 2;
-                    background: Theme.primary;
-                    animate width { duration: 150ms; }
-                }
+            Path {
+                width: 20px;
+                height: 20px;
+                viewbox-width: 24;
+                viewbox-height: 24;
+                commands: root.item.expanded ? "M6 9l6 6 6-6" : "M9 6l6 6-6 6";
+                stroke: Theme.on-surface-variant;
+                stroke-width: 2px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
             }
         }
         VerticalLayout {
             alignment: center;
-            spacing: 2px;
+            spacing: 1px;
             Text {
-                text: root.item.name;
-                font-size: 16px;
+                text: root.item.title;
+                font-size: 15px;
+                font-weight: 600;
                 color: Theme.on-surface;
                 overflow: elide;
             }
             Text {
-                text: root.item.sub;
+                text: root.item.subtitle;
                 font-size: 12px;
                 color: Theme.on-surface-variant;
+            }
+        }
+        if root.item.idx >= 0: VerticalLayout {
+            alignment: center;
+            IconBtn {
+                width: 40px;
+                height: 40px;
+                icon: "M5 7h14 M10 11v6 M14 11v6 M6 7l1 13h10l1-13 M9 7V4h6v3";
+                clicked => { root.remove(); }
+            }
+        }
+    }
+    if root.item.kind == 1: HorizontalLayout {
+        padding-left: 20px;
+        padding-right: 16px;
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.item.title;
+                font-size: 15px;
+                color: Theme.on-surface;
                 overflow: elide;
+            }
+            Text {
+                text: root.item.subtitle;
+                font-size: 11px;
+                color: Theme.on-surface-variant;
             }
         }
         VerticalLayout {
@@ -244,23 +251,14 @@ component ServerRow inherits Rectangle {
             }
         }
     }
-    ta := TouchArea {
-        clicked => { root.clicked(); }
-    }
-}
-
-component PageTitle inherits Text {
-    font-size: 28px;
-    font-weight: 600;
-    color: Theme.on-surface;
 }
 
 export component MainWindow inherits Window {
     title: "JustPN";
-    preferred-width: 380px;
-    preferred-height: 720px;
-    min-width: 320px;
-    min-height: 560px;
+    preferred-width: 920px;
+    preferred-height: 580px;
+    min-width: 700px;
+    min-height: 460px;
     background: Theme.surface;
 
     in property <ConnState> conn-state: ConnState.off;
@@ -268,38 +266,151 @@ export component MainWindow inherits Window {
     in property <string> note;
     in property <string> message;
     in property <string> selected-name;
+    in property <string> selected-info;
     in property <string> selected-ping;
-    in property <[ServerItem]> servers;
-    in property <[SubItem]> subs;
-    in-out property <int> page: 0;
+    in property <[RowItem]> rows;
+    in-out property <bool> show-add: false;
 
     callback toggle-connect();
     callback select-server(int);
+    callback toggle-group(int);
+    callback remove-sub(int);
+    callback search(string);
     callback ping-all();
     callback add(string);
     callback refresh-subs();
-    callback remove-sub(int);
 
-    VerticalLayout {
+    HorizontalLayout {
+        // Левая панель: серверы
         Rectangle {
-            vertical-stretch: 1;
+            horizontal-stretch: 1.1;
+            min-width: 340px;
             clip: true;
+            VerticalLayout {
+                padding: 20px;
+                padding-bottom: 0px;
+                spacing: 12px;
+                Text {
+                    text: "Серверы";
+                    font-size: 28px;
+                    font-weight: 600;
+                    color: Theme.on-surface;
+                }
+                HorizontalLayout {
+                    spacing: 2px;
+                    Field {
+                        height: 48px;
+                        border-radius: 24px;
+                        placeholder: "Поиск серверов";
+                        edited(t) => { root.search(t); }
+                    }
+                    IconBtn {
+                        icon: "M13 2L4 14h7l-1 8 10-13h-7z";
+                        clicked => { root.ping-all(); }
+                    }
+                    IconBtn {
+                        icon: "M20 12a8 8 0 1 1-2.3-5.7 M20 4v5h-5";
+                        clicked => { root.refresh-subs(); }
+                    }
+                    IconBtn {
+                        icon: root.show-add ? "M6 6l12 12 M18 6L6 18" : "M12 5v14 M5 12h14";
+                        tint: Theme.primary;
+                        clicked => { root.show-add = !root.show-add; }
+                    }
+                }
+                if root.show-add: HorizontalLayout {
+                    spacing: 8px;
+                    link-field := Field {
+                        height: 48px;
+                        border-radius: 24px;
+                        placeholder: "Ссылка на подписку или vless://";
+                        accepted => {
+                            root.add(self.text);
+                            self.text = "";
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        FilledBtn {
+                            width: 96px;
+                            text: "Добавить";
+                            clicked => {
+                                root.add(link-field.text);
+                                link-field.text = "";
+                            }
+                        }
+                    }
+                }
+                if root.rows.length == 0: Text {
+                    vertical-stretch: 1;
+                    text: "Серверов пока нет.\nНажмите «+» и вставьте ссылку на подписку.";
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    font-size: 14px;
+                    color: Theme.on-surface-variant;
+                }
+                if root.rows.length > 0: Flickable {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 4px;
+                        padding-bottom: 12px;
+                        for row[i] in root.rows: Row {
+                            item: row;
+                            clicked => {
+                                if (row.kind == 0) { root.toggle-group(row.idx); }
+                                else { root.select-server(row.idx); }
+                            }
+                            remove => { root.remove-sub(row.idx); }
+                        }
+                    }
+                }
+            }
+        }
 
-            // ── Подключение ─────────────────────────────────────────────
-            if root.page == 0: VerticalLayout {
+        // Правая панель: подключение
+        Rectangle {
+            horizontal-stretch: 1;
+            min-width: 300px;
+            background: Theme.container;
+            VerticalLayout {
                 padding: 24px;
                 spacing: 16px;
-                PageTitle { text: "JustPN"; }
+                HorizontalLayout {
+                    alignment: end;
+                    Rectangle {
+                        height: 36px;
+                        width: 200px;
+                        border-radius: 12px;
+                        background: Theme.container-highest;
+                        Text {
+                            text: "Системный прокси · Xray";
+                            font-size: 13px;
+                            color: Theme.on-surface-variant;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
                 Rectangle {
                     vertical-stretch: 1;
                     VerticalLayout {
                         alignment: center;
-                        spacing: 28px;
+                        spacing: 24px;
                         HorizontalLayout {
                             alignment: center;
-                            ConnectButton {
-                                state: root.conn-state;
-                                clicked => { root.toggle-connect(); }
+                            Rectangle {
+                                width: 240px;
+                                height: 240px;
+                                border-radius: 120px;
+                                border-width: 1px;
+                                border-color: Theme.primary.with-alpha(root.conn-state == ConnState.on ? 0.4 : 0.0);
+                                animate border-color { duration: 300ms; }
+                                ConnectButton {
+                                    x: (parent.width - self.width) / 2;
+                                    y: (parent.height - self.height) / 2;
+                                    state: root.conn-state;
+                                    clicked => { root.toggle-connect(); }
+                                }
                             }
                         }
                         VerticalLayout {
@@ -323,166 +434,35 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
-                Rectangle {
-                    height: 76px;
-                    border-radius: 24px;
-                    background: Theme.container-high;
-                    Rectangle {
-                        border-radius: parent.border-radius;
-                        background: Theme.on-surface.with-alpha(card-ta.pressed ? 0.12 : card-ta.has-hover ? 0.06 : 0);
+                VerticalLayout {
+                    spacing: 2px;
+                    Text {
+                        text: root.selected-name == "" ? "Сервер не выбран" : root.selected-name;
+                        font-size: 16px;
+                        font-weight: 500;
+                        horizontal-alignment: center;
+                        color: Theme.on-surface;
+                        overflow: elide;
                     }
-                    HorizontalLayout {
-                        padding-left: 20px;
-                        padding-right: 20px;
-                        spacing: 12px;
-                        VerticalLayout {
-                            alignment: center;
-                            spacing: 2px;
-                            Text {
-                                text: "Сервер";
-                                font-size: 12px;
-                                color: Theme.on-surface-variant;
-                            }
-                            Text {
-                                text: root.selected-name == "" ? "Не выбран" : root.selected-name;
-                                font-size: 16px;
-                                font-weight: 500;
-                                color: Theme.on-surface;
-                                overflow: elide;
-                            }
-                        }
-                        VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: root.selected-ping;
-                                font-size: 13px;
-                                font-weight: 500;
-                                color: Theme.primary;
-                            }
-                        }
-                    }
-                    card-ta := TouchArea {
-                        clicked => { root.page = 1; }
+                    Text {
+                        text: root.selected-info + (root.selected-ping == "" ? "" : "  ·  " + root.selected-ping);
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        color: Theme.on-surface-variant;
                     }
                 }
-            }
-
-            // ── Серверы ─────────────────────────────────────────────────
-            if root.page == 1: VerticalLayout {
-                padding: 24px;
-                padding-bottom: 0px;
-                spacing: 12px;
                 HorizontalLayout {
-                    PageTitle { text: "Серверы"; }
-                    IconBtn {
-                        icon: "M13 2L4 14h7l-1 8 10-13h-7z";
+                    alignment: center;
+                    FilledBtn {
+                        width: 200px;
+                        height: 44px;
+                        border-radius: 22px;
+                        text: "Тест пинга";
                         clicked => { root.ping-all(); }
                     }
                 }
-                if root.servers.length == 0: Text {
-                    vertical-stretch: 1;
-                    text: "Серверов пока нет.\nДобавьте подписку на вкладке «Подписки».";
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    font-size: 14px;
-                    color: Theme.on-surface-variant;
-                }
-                if root.servers.length > 0: Flickable {
-                    vertical-stretch: 1;
-                    VerticalLayout {
-                        spacing: 8px;
-                        padding-bottom: 12px;
-                        for server[i] in root.servers: ServerRow {
-                            item: server;
-                            clicked => { root.select-server(i); }
-                        }
-                    }
-                }
             }
 
-            // ── Подписки ────────────────────────────────────────────────
-            if root.page == 2: VerticalLayout {
-                padding: 24px;
-                padding-bottom: 0px;
-                spacing: 12px;
-                HorizontalLayout {
-                    PageTitle { text: "Подписки"; }
-                    IconBtn {
-                        icon: "M20 12a8 8 0 1 1-2.3-5.7 M20 4v5h-5";
-                        clicked => { root.refresh-subs(); }
-                    }
-                }
-                HorizontalLayout {
-                    spacing: 8px;
-                    link-field := Field {
-                        placeholder: "Ссылка на подписку или vless://";
-                        accepted => {
-                            root.add(self.text);
-                            self.text = "";
-                        }
-                    }
-                    VerticalLayout {
-                        alignment: center;
-                        FilledBtn {
-                            width: 96px;
-                            text: "Добавить";
-                            clicked => {
-                                root.add(link-field.text);
-                                link-field.text = "";
-                            }
-                        }
-                    }
-                }
-                if root.subs.length == 0: Text {
-                    vertical-stretch: 1;
-                    text: "Вставьте ссылку на подписку — серверы\nзагрузятся автоматически.";
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    font-size: 14px;
-                    color: Theme.on-surface-variant;
-                }
-                if root.subs.length > 0: Flickable {
-                    vertical-stretch: 1;
-                    VerticalLayout {
-                        spacing: 8px;
-                        padding-bottom: 12px;
-                        for sub[i] in root.subs: Rectangle {
-                            height: 72px;
-                            border-radius: 20px;
-                            background: Theme.container;
-                            HorizontalLayout {
-                                padding-left: 20px;
-                                padding-right: 4px;
-                                spacing: 8px;
-                                VerticalLayout {
-                                    alignment: center;
-                                    spacing: 2px;
-                                    Text {
-                                        text: sub.name;
-                                        font-size: 16px;
-                                        color: Theme.on-surface;
-                                        overflow: elide;
-                                    }
-                                    Text {
-                                        text: sub.count + " серв.";
-                                        font-size: 12px;
-                                        color: Theme.on-surface-variant;
-                                    }
-                                }
-                                VerticalLayout {
-                                    alignment: center;
-                                    IconBtn {
-                                        icon: "M5 7h14 M10 11v6 M14 11v6 M6 7l1 13h10l1-13 M9 7V4h6v3";
-                                        clicked => { root.remove-sub(i); }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Snackbar
             if root.message != "": Rectangle {
                 x: 16px;
                 y: parent.height - self.height - 16px;
@@ -499,32 +479,6 @@ export component MainWindow inherits Window {
                     color: Theme.inverse-on-surface;
                     vertical-alignment: center;
                     overflow: elide;
-                }
-            }
-        }
-
-        // Navigation bar
-        Rectangle {
-            height: 80px;
-            background: Theme.container;
-            HorizontalLayout {
-                NavItem {
-                    label: "Подключение";
-                    icon: "M12 3v9 M6.4 6.8a8 8 0 1 0 11.2 0";
-                    active: root.page == 0;
-                    clicked => { root.page = 0; }
-                }
-                NavItem {
-                    label: "Серверы";
-                    icon: "M4 6h16 M4 12h16 M4 18h16";
-                    active: root.page == 1;
-                    clicked => { root.page = 1; }
-                }
-                NavItem {
-                    label: "Подписки";
-                    icon: "M5 5a14 14 0 0 1 14 14 M5 11a8 8 0 0 1 8 8 M6 19h.01";
-                    active: root.page == 2;
-                    clicked => { root.page = 2; }
                 }
             }
         }

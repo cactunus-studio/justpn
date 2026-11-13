@@ -3,7 +3,7 @@
 mod model;
 mod sys;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Child;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -22,6 +22,8 @@ struct App {
     since: Option<Instant>,
     ping: HashMap<String, String>,
     busy: bool,
+    query: String,
+    collapsed: HashSet<String>,
 }
 
 type Shared = Arc<Mutex<App>>;
@@ -42,38 +44,59 @@ fn ui_do(ui: &Weak<MainWindow>, f: impl FnOnce(&MainWindow) + Send + 'static) {
 fn render(app: &Shared, ui: &Weak<MainWindow>) {
     let a = lock(app);
     let st = &a.state;
-    let servers: Vec<ServerItem> = st
-        .servers
-        .iter()
-        .map(|s| ServerItem {
-            name: s.name.as_str().into(),
-            sub: st
-                .subs
-                .iter()
-                .find(|x| x.url == s.sub)
-                .map_or("Вручную", |x| x.name.as_str())
-                .into(),
-            ping: a.ping.get(&s.link).map_or("", String::as_str).into(),
-            selected: st.selected.as_ref() == Some(&s.link),
-        })
-        .collect();
-    let subs: Vec<SubItem> = st
-        .subs
-        .iter()
-        .map(|x| SubItem {
-            name: x.name.as_str().into(),
-            url: x.url.as_str().into(),
-            count: st.servers.iter().filter(|s| s.sub == x.url).count() as i32,
-        })
-        .collect();
+    let q = a.query.to_lowercase();
+    let searching = !q.is_empty();
+
+    // Группы: каждая подписка, затем серверы, добавленные вручную.
+    let mut groups: Vec<(i32, &str, &str)> =
+        st.subs.iter().enumerate().map(|(i, s)| (i as i32, s.name.as_str(), s.url.as_str())).collect();
+    groups.push((-1, "Вручную", ""));
+
+    let mut rows: Vec<RowItem> = Vec::new();
+    for (gi, name, url) in groups {
+        let members: Vec<(usize, &Server)> = st
+            .servers
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.sub == url && (!searching || s.name.to_lowercase().contains(&q)))
+            .collect();
+        if members.is_empty() && (gi < 0 || searching) {
+            continue;
+        }
+        let expanded = searching || !a.collapsed.contains(url);
+        rows.push(RowItem {
+            kind: 0,
+            title: name.into(),
+            subtitle: format!("Серверов: {}", members.len()).into(),
+            ping: "".into(),
+            selected: false,
+            expanded,
+            idx: gi,
+        });
+        if expanded {
+            for (i, s) in members {
+                rows.push(RowItem {
+                    kind: 1,
+                    title: s.name.as_str().into(),
+                    subtitle: model::describe(&s.link).into(),
+                    ping: a.ping.get(&s.link).map_or("", String::as_str).into(),
+                    selected: st.selected.as_ref() == Some(&s.link),
+                    expanded: false,
+                    idx: i as i32,
+                });
+            }
+        }
+    }
+
     let selected = st.servers.iter().find(|s| st.selected.as_ref() == Some(&s.link));
     let sel_name = selected.map_or(String::new(), |s| s.name.clone());
+    let sel_info = selected.map_or(String::new(), |s| model::describe(&s.link));
     let sel_ping = selected.and_then(|s| a.ping.get(&s.link)).cloned().unwrap_or_default();
     drop(a);
     ui_do(ui, move |u| {
-        u.set_servers(ModelRc::new(VecModel::from(servers)));
-        u.set_subs(ModelRc::new(VecModel::from(subs)));
+        u.set_rows(ModelRc::new(VecModel::from(rows)));
         u.set_selected_name(sel_name.into());
+        u.set_selected_info(sel_info.into());
         u.set_selected_ping(sel_ping.into());
     });
 }
@@ -274,12 +297,14 @@ fn main() {
         since: None,
         ping: HashMap::new(),
         busy: false,
+        query: String::new(),
+        collapsed: HashSet::new(),
     }));
 
     let win = MainWindow::new().unwrap();
     let ui = win.as_weak();
     if first_run {
-        win.set_page(2);
+        win.set_show_add(true);
     }
     render(&app, &ui);
 
@@ -324,6 +349,29 @@ fn main() {
     win.on_add({
         let (app, ui) = (app.clone(), ui.clone());
         move |t| add_input(&app, &ui, t.to_string())
+    });
+
+    win.on_search({
+        let (app, ui) = (app.clone(), ui.clone());
+        move |t| {
+            lock(&app).query = t.trim().to_string();
+            render(&app, &ui);
+        }
+    });
+
+    win.on_toggle_group({
+        let (app, ui) = (app.clone(), ui.clone());
+        move |i| {
+            {
+                let mut a = lock(&app);
+                let url = if i >= 0 { a.state.subs.get(i as usize).map(|s| s.url.clone()) } else { Some(String::new()) };
+                let Some(url) = url else { return };
+                if !a.collapsed.remove(&url) {
+                    a.collapsed.insert(url);
+                }
+            }
+            render(&app, &ui);
+        }
     });
 
     win.on_ping_all({

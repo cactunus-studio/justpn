@@ -235,3 +235,10 @@ pub fn xray_config(link: &str, socks: u16, http: u16) -> Result<String, String> 
     });
     serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())
 }
+
+/// Короткое описание вида «VLESS / TCP / REALITY» для списка серверов.
+pub fn describe(link: &str) -> String {
+    let Some(v) = parse_vless(link) else { return "VLESS".into() };
+    let g = |k: &str, d: &str| v.q.get(k).filter(|s| !s.is_empty()).map_or(d, String::as_str).to_uppercase();
+    format!("VLESS / {} / {}", g("type", "tcp"), g("security", "none"))
+}

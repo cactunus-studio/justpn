@@ -1,0 +1,106 @@
+import { Palette } from "std-widgets.slint";
+
+export enum ConnState { off, connecting, on }
+
+export struct ServerItem { name: string, sub: string, ping: string, selected: bool }
+export struct SubItem { name: string, url: string, count: int }
+
+// Material 3: baseline-схема (seed #6750A4), светлая и тёмная.
+global Theme {
+    out property <bool> dark: Palette.color-scheme != ColorScheme.light;
+    out property <color> surface: dark ? #141218 : #FEF7FF;
+    out property <color> container: dark ? #211F26 : #F3EDF7;
+    out property <color> container-high: dark ? #2B2930 : #ECE6F0;
+    out property <color> container-highest: dark ? #36343B : #E6E0E9;
+    out property <color> on-surface: dark ? #E6E0E9 : #1D1B20;
+    out property <color> on-surface-variant: dark ? #CAC4D0 : #49454F;
+    out property <color> primary: dark ? #D0BCFF : #6750A4;
+    out property <color> on-primary: dark ? #381E72 : #FFFFFF;
+    out property <color> primary-container: dark ? #4F378B : #EADDFF;
+    out property <color> on-primary-container: dark ? #EADDFF : #21005D;
+    out property <color> secondary-container: dark ? #4A4458 : #E8DEF8;
+    out property <color> on-secondary-container: dark ? #E8DEF8 : #1D192B;
+    out property <color> outline: dark ? #938F99 : #79747E;
+    out property <color> inverse-surface: dark ? #E6E0E9 : #322F35;
+    out property <color> inverse-on-surface: dark ? #322F35 : #F5EFF7;
+}
+
+component IconBtn inherits Rectangle {
+    in property <string> icon;
+    in property <color> tint: Theme.on-surface-variant;
+    callback clicked();
+    width: 48px;
+    height: 48px;
+    border-radius: 24px;
+    background: Theme.on-surface.with-alpha(ta.pressed ? 0.12 : ta.has-hover ? 0.08 : 0);
+    Path {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: 24px;
+        height: 24px;
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: root.icon;
+        stroke: root.tint;
+        stroke-width: 2px;
+        stroke-line-cap: round;
+        stroke-line-join: round;
+    }
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+component FilledBtn inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    height: 40px;
+    border-radius: 20px;
+    background: Theme.primary;
+    Text {
+        text: root.text;
+        color: Theme.on-primary;
+        font-size: 14px;
+        font-weight: 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    Rectangle {
+        border-radius: parent.border-radius;
+        background: Theme.on-primary.with-alpha(ta.pressed ? 0.12 : ta.has-hover ? 0.08 : 0);
+    }
+    ta := TouchArea {
+        clicked => { root.clicked(); }
+    }
+}
+
+component Field inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder;
+    callback accepted();
+    height: 56px;
+    border-radius: 28px;
+    background: Theme.surface;
+    border-width: input.has-focus ? 2px : 1px;
+    border-color: input.has-focus ? Theme.primary : Theme.outline;
+    input := TextInput {
+        x: 20px;
+        y: (parent.height - self.height) / 2;
+        width: parent.width - 40px;
+        height: 24px;
+        font-size: 16px;
+        single-line: true;
+        color: Theme.on-surface;
+        selection-background-color: Theme.primary-container;
+        selection-foreground-color: Theme.on-primary-container;
+        accepted => { root.accepted(); }
+    }
+    if input.text == "": Text {
+        x: 20px;
+        y: (parent.height - self.height) / 2;
+        text: root.placeholder;
+        font-size: 16px;
+        color: Theme.on-surface-variant;
+    }
+}
+
